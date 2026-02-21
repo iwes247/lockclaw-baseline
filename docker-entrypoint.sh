@@ -123,8 +123,24 @@ show_banner() {
     log ""
 }
 
+# ── Pre-flight security gate ─────────────────────────────────
+# ⚠ SECURITY: Fail-closed. If pre-flight detects unauthorized ports,
+# the container MUST NOT start any application processes.
+run_preflight() {
+    local preflight="${LOCKCLAW_HOME}/scripts/pre-flight.sh"
+    if [ -x "$preflight" ]; then
+        if ! "$preflight"; then
+            log "FATAL: pre-flight security check failed. Aborting."
+            exit 1
+        fi
+    else
+        log "WARN: pre-flight.sh not found or not executable at $preflight"
+    fi
+}
+
 # ── Main ─────────────────────────────────────────────────────
 start_services() {
+    run_preflight
     start_ssh
 
     case "$RUNTIME" in
