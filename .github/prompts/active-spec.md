@@ -1,24 +1,40 @@
-# LockClaw Appliance — Active Spec
-> **Phone → GitHub → VS Code bridge**
-> **User:** iwes247 (iwes247@users.noreply.github.com)
+# LockClaw Baseline — Active Spec
 
-- GitHub user: iwes247
-- Never push as your work user. Verify: git config user.name → iwes247
-—
+> **This file is the phone-to-VSCode bridge.**
+> Edit from your phone (via GPT) → push → pull in VS Code → Copilot reads and executes.
 
 ## Project summary
-Full OS-level hardened Linux appliance for VMs and bare metal. 
 
-### Architecture
-- overlays/etc/security/ ← kernel, SSH, audit, fail2ban
-- overlays/etc/network/ ← nftables firewall, resolver
-- scripts/ ← build, smoke test, audit tooling
-- lockclaw-core/ ← shared audit scripts + port allowlists
-—
+LockClaw Baseline is a secure-by-default Docker deployment baseline for
+self-hosting AI runtimes. No OS-level hardening (that's lockclaw-appliance).
+No `--cap-add NET_ADMIN` required. Services bind to loopback only. SSH is
+opt-in. Port audit hard-fails on unexpected listeners.
 
-## Current Task
-[PHONE USERS: Replace this with your task. Copilot will read this.]
-—
+## Architecture
 
-## Session History
-_No active sessions. Run `sync-vibe` at work to populate._
+```
+scripts/        ← smoke test tooling
+lockclaw-core/  ← shared audit scripts and port allowlists (vendored)
+packages/       ← baseline package manifest
+docs/           ← threat model
+```
+
+## Security model
+
+- All services bind to 127.0.0.1 — never directly exposed.
+- SSH disabled by default; opt-in via LOCKCLAW_ENABLE_SSH=1.
+- SSH (when enabled): key-only, no root, modern ciphers.
+- Non-root user (`lockclaw`) for all runtime processes.
+- Port audit: smoke tests hard-fail on unexpected non-loopback listeners.
+- No nftables, auditd, or fail2ban — those are host/VM responsibilities.
+
+## Current task
+
+TASK_START
+[READY FOR NEXT VIBE]
+TASK_END
+
+## History
+
+HISTORY_START
+HISTORY_END
