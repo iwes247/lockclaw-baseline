@@ -101,7 +101,7 @@ LABEL org.opencontainers.image.description="LockClaw Baseline + OpenClaw AI gate
 # ── Install Node.js 22 ──────────────────────────────────────
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      ca-certificates gnupg git && \
+      ca-certificates gnupg git build-essential python3 && \
     mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
@@ -113,7 +113,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ── Install OpenClaw gateway ─────────────────────────────────
-RUN npm install -g openclaw@latest && \
+# Pin version for reproducible builds — update deliberately.
+RUN npm install -g openclaw@2026.2.19-2 && \
     npm cache clean --force
 
 # ── Configure OpenClaw workspace ─────────────────────────────
@@ -134,6 +135,11 @@ RUN mkdir -p /home/lockclaw/.openclaw/workspace/skills && \
 # ── Pre-install claude-mem plugin ────────────────────────────
 RUN npm install -g claude-mem@latest && \
     npm cache clean --force
+
+# ── Clean up build tools (not needed at runtime) ────────────
+RUN apt-get purge -y build-essential python3 && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # OpenClaw listens on 127.0.0.1:18789 (loopback only).
 # Access via SSH tunnel: ssh -L 18789:127.0.0.1:18789 ...
