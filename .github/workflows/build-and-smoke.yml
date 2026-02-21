@@ -20,6 +20,16 @@ jobs:
           find scripts/ lockclaw-core/ -name '*.sh' \
             -exec shellcheck --severity=warning {} +
 
+      - name: HARD FAIL — no unpinned versions in Dockerfile
+        run: |
+          # Skip comment lines (starting with #), match @latest/@next/@canary
+          if grep -nE '@latest|@next|@canary' Dockerfile | grep -vE '^\d+:\s*#'; then
+            echo "FAIL: Found unpinned @latest/@next/@canary in Dockerfile"
+            echo "Pin every dependency to an exact version using ARG at the top of each stage."
+            exit 1
+          fi
+          echo "PASS: All Dockerfile dependencies are pinned"
+
   audit:
     needs: lint
     runs-on: ubuntu-latest
