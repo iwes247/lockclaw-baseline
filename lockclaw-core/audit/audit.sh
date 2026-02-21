@@ -66,10 +66,10 @@ check() {
     shift
     if "$@" >/dev/null 2>&1; then
         echo "  PASS: $desc"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         echo "  FAIL: $desc"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 
@@ -160,10 +160,10 @@ if [ "$MODE" = "appliance" ]; then
         if [ -f "$RESOLVED_OVERLAY" ]; then
             if grep -Eqi 'DNSSEC\s*=\s*allow-downgrade' "$RESOLVED_OVERLAY"; then
                 echo "  FAIL: resolved.conf uses DNSSEC=allow-downgrade (vulnerable)"
-                ((FAIL++))
+                FAIL=$((FAIL + 1))
             else
                 echo "  PASS: DNSSEC not in downgrade mode"
-                ((PASS++))
+                PASS=$((PASS + 1))
             fi
         fi
 
