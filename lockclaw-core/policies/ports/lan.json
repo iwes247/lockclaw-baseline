@@ -1,0 +1,6 @@
+{
+  "profile": "lan",
+  "description": "LAN-exposed profile — SSH + AI runtime API accessible on local network.",
+  "allowed_ports": [22, 18789, 11434],
+  "notes": "For trusted LAN environments only. OpenClaw gateway (18789) and Ollama API (11434) are exposed. Do NOT use this profile on public networks."
+}

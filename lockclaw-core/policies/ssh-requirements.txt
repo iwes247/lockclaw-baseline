@@ -1,0 +1,10 @@
+# SSH posture requirements
+# Used by audit scripts to validate SSH configuration.
+# Format: DIRECTIVE VALUE (case-insensitive match)
+
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+MaxAuthTries 3
+X11Forwarding no
+PermitEmptyPasswords no

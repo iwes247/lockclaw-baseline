@@ -1,0 +1,6 @@
+{
+  "profile": "appliance",
+  "description": "VM/bare-metal appliance — SSH required for admin. AI runtimes are loopback-only.",
+  "allowed_ports": [22],
+  "notes": "SSH on port 22 with hardened config (key-only, modern ciphers, rate-limited). AI runtimes bind loopback. Access APIs via SSH tunnel or Tailscale."
+}

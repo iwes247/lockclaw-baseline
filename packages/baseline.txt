@@ -1,0 +1,17 @@
+# LockClaw Baseline — container packages
+# Minimal set for a functional deployment baseline.
+# No OS-level hardening tools (nftables, auditd, fail2ban).
+# Those belong in lockclaw-appliance.
+
+# Networking essentials
+iproute2
+curl
+ca-certificates
+procps
+
+# Diagnostics
+bind9-dnsutils
+iputils-ping
+
+# sudo for the lockclaw user
+sudo

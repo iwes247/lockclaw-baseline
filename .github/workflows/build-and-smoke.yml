@@ -1,0 +1,167 @@
+name: build-and-smoke
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: |
+          find scripts/ lockclaw-core/ -name '*.sh' \
+            -exec shellcheck --severity=warning {} +
+
+  audit:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/*.sh
+          chmod +x lockclaw-core/audit/*.sh
+
+      - name: Port allowlist validation
+        run: |
+          # Verify all port allowlist files are valid JSON
+          for f in lockclaw-core/policies/ports/*.json; do
+            python3 -c "import json; json.load(open('$f'))" \
+              || { echo "FAIL: Invalid JSON in $f"; exit 1; }
+            echo "PASS: $f is valid JSON"
+          done
+
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [base, openclaw, ollama]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (${{ matrix.target }})
+        run: >
+          docker build
+          --target ${{ matrix.target }}
+          -t lockclaw:${{ matrix.target }}
+          .
+
+      - name: Start container (no elevated capabilities)
+        run: |
+          docker run -d \
+            --name lockclaw-${{ matrix.target }} \
+            lockclaw:${{ matrix.target }}
+
+      - name: Wait for services
+        run: sleep 5
+
+      - name: Run smoke tests
+        run: |
+          docker exec lockclaw-${{ matrix.target }} \
+            /opt/lockclaw/scripts/test-smoke.sh
+
+      - name: HARD FAIL — no unexpected published ports
+        run: |
+          echo "=== Port Exposure Check (${{ matrix.target }}) ==="
+          LISTENERS=$(docker exec lockclaw-${{ matrix.target }} \
+            ss -tlnH 2>/dev/null | awk '{print $4}' || true)
+          echo "All listeners: $LISTENERS"
+
+          # Nothing should be on non-loopback by default
+          # (SSH is opt-in via LOCKCLAW_ENABLE_SSH=1)
+          NON_LOOPBACK=$(echo "$LISTENERS" \
+            | grep -v '127\.0\.0\.1' \
+            | grep -v '\[::1\]' \
+            | grep -v '^\*:' \
+            || true)
+
+          if [ -n "$NON_LOOPBACK" ]; then
+            echo "FAIL: Unexpected non-loopback listeners:"
+            echo "$NON_LOOPBACK"
+            exit 1
+          fi
+          echo "PASS: All services are loopback-only (no published ports)"
+
+      - name: Verify SSH is NOT running by default
+        run: |
+          if docker exec lockclaw-${{ matrix.target }} \
+            ss -tlnH 2>/dev/null | grep -q ':22'; then
+            echo "FAIL: SSH is listening but LOCKCLAW_ENABLE_SSH was not set"
+            exit 1
+          fi
+          echo "PASS: SSH is not running by default"
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f lockclaw-${{ matrix.target }} 2>/dev/null || true
+
+  build-with-ssh:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build openclaw image
+        run: docker build --target openclaw -t lockclaw:openclaw-ssh .
+
+      - name: Generate test SSH key
+        run: ssh-keygen -t ed25519 -f /tmp/test_key -N "" -q
+
+      - name: Start container with SSH enabled
+        run: |
+          docker run -d \
+            --name lockclaw-ssh \
+            -e LOCKCLAW_ENABLE_SSH=1 \
+            -e SSH_PUBLIC_KEY="$(cat /tmp/test_key.pub)" \
+            lockclaw:openclaw-ssh
+
+      - name: Wait for services
+        run: sleep 5
+
+      - name: Verify SSH is running and hardened
+        run: |
+          docker exec lockclaw-ssh ss -tlnH | grep ':22' \
+            || { echo "FAIL: SSH not listening"; exit 1; }
+          echo "PASS: SSH is listening"
+
+          docker exec lockclaw-ssh \
+            cat /etc/ssh/sshd_config.d/10-lockclaw.conf \
+            | grep -qi 'PermitRootLogin no' \
+            || { echo "FAIL: PermitRootLogin not no"; exit 1; }
+          echo "PASS: SSH hardened"
+
+      - name: Port check — only SSH on non-loopback
+        run: |
+          NON_LOOPBACK=$(docker exec lockclaw-ssh \
+            ss -tlnH 2>/dev/null | awk '{print $4}' \
+            | grep -v '127\.0\.0\.1' \
+            | grep -v '\[::1\]' \
+            | grep -v '^\*:' \
+            || true)
+
+          UNEXPECTED=$(echo "$NON_LOOPBACK" \
+            | grep -Ev ':22$' \
+            || true)
+
+          if [ -n "$UNEXPECTED" ]; then
+            echo "FAIL: Unexpected non-loopback listeners: $UNEXPECTED"
+            exit 1
+          fi
+          echo "PASS: Only SSH on non-loopback"
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f lockclaw-ssh 2>/dev/null || true

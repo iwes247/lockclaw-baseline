@@ -1,0 +1,6 @@
+{
+  "profile": "container-ssh",
+  "description": "Container with SSH enabled for remote admin access.",
+  "allowed_ports": [22],
+  "notes": "SSH on port 22 (key-auth only). AI runtimes remain loopback-only — access via SSH tunnel."
+}
