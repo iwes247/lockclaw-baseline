@@ -1,0 +1,13 @@
+# Force LF line endings for all shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Force LF for Dockerfiles and compose files
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Config files that may be deployed to Linux
+*.conf text eol=lf
+*.rules text eol=lf
+*.local text eol=lf

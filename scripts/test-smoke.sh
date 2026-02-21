@@ -11,6 +11,7 @@ note() { echo "NOTE: $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE_DIR="${SCRIPT_DIR}/../lockclaw-core"
+export CORE_DIR
 
 # ── Detect runtime ──────────────────────────────────────────
 RUNTIME="none"

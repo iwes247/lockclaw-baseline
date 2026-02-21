@@ -67,7 +67,7 @@ run_rkhunter() {
         return
     fi
 
-    RK_OUT=$(rkhunter --check --sk --nocolors 2>&1) && RK_RC=$? || RK_RC=$?
+    RK_OUT=$(rkhunter --check --sk --nocolors 2>&1) || true
 
     WARNINGS=$(echo "$RK_OUT" | grep -c '\[ Warning \]' || true)
     INFECTED=$(echo "$RK_OUT" | grep -c '\[ Infected \]' || true)
@@ -94,7 +94,7 @@ run_lynis() {
         return
     fi
 
-    LYNIS_OUT=$(lynis audit system --quick --no-colors 2>&1) && LYNIS_RC=$? || LYNIS_RC=$?
+    LYNIS_OUT=$(lynis audit system --quick --no-colors 2>&1) || true
 
     SCORE=$(echo "$LYNIS_OUT" | grep -oP 'Hardening index\s*:\s*\K[0-9]+' || echo "unknown")
 

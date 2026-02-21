@@ -10,7 +10,7 @@ set -euo pipefail
 
 # ── Allowlist ────────────────────────────────────────────────
 # Only these ports are permitted to be listening at pre-flight.
-ALLOWLIST="22 8080"
+ALLOWLIST=(22 8080)
 
 log() { echo "[pre-flight] $*"; }
 
@@ -32,7 +32,7 @@ RAW_OUTPUT=$(ss -ltn 2>/dev/null || true)
 #   [::1]:8080        — IPv6 loopback
 #
 # We extract the port number after the last colon.
-LISTENING_PORTS=$(echo "$RAW_OUTPUT" \
+mapfile -t LISTENING_PORTS < <(echo "$RAW_OUTPUT" \
     | tail -n +2 \
     | awk '{print $4}' \
     | sed -E 's/.*:([0-9]+)$/\1/' \
@@ -41,9 +41,10 @@ LISTENING_PORTS=$(echo "$RAW_OUTPUT" \
 # ── Validation: compare against allowlist ────────────────────
 VIOLATION=0
 
-for port in $LISTENING_PORTS; do
+for port in "${LISTENING_PORTS[@]}"; do
+    [ -z "$port" ] && continue
     AUTHORIZED=0
-    for allowed in $ALLOWLIST; do
+    for allowed in "${ALLOWLIST[@]}"; do
         if [ "$port" = "$allowed" ]; then
             AUTHORIZED=1
             break
@@ -59,14 +60,14 @@ done
 # ── Action: fail closed on any violation ─────────────────────
 if [ "$VIOLATION" -ne 0 ]; then
     log "SECURITY VIOLATION: Unauthorized port detected"
-    log "Allowed ports: $ALLOWLIST"
+    log "Allowed ports: ${ALLOWLIST[*]}"
     log "Container startup BLOCKED. Investigate and rebuild."
     exit 1
 fi
 
 # ── Proceed: all clear ───────────────────────────────────────
-if [ -n "$LISTENING_PORTS" ]; then
-    log "OK — listening ports authorized: $LISTENING_PORTS"
+if [ "${#LISTENING_PORTS[@]}" -gt 0 ] && [ -n "${LISTENING_PORTS[0]}" ]; then
+    log "OK — listening ports authorized: ${LISTENING_PORTS[*]}"
 else
     log "OK — no ports listening at pre-flight (clean start)"
 fi
