@@ -2,6 +2,44 @@
 
 Secure-by-default Docker deployment baseline for self-hosting AI runtimes.
 
+> **⚠️ Baseline is NOT host hardening.**
+> It assumes your host is already reasonably secured (firewall, SSH, kernel).
+> For OS-level hardening, see [lockclaw-appliance](https://github.com/iwes247/lockclaw-appliance).
+> No ports are published by default.
+
+## Start Here (Pick One)
+
+| I want to… | Use |
+|------------|-----|
+| Run AI runtimes in Docker with sane security defaults | **lockclaw-baseline** *(you are here)* |
+| Harden a VM or bare-metal host for AI workloads | [lockclaw-appliance](https://github.com/iwes247/lockclaw-appliance) |
+| Understand the shared audit/policy layer | [lockclaw-core](https://github.com/iwes247/lockclaw-core) *(vendored — most users don't clone directly)* |
+
+## How the repos fit together
+
+```
+┌───────────────────┐     ┌────────────────────┐
+│ lockclaw-baseline │     │ lockclaw-appliance  │
+│  (Docker / OCI)   │     │ (VM / bare metal)   │
+└────────┬──────────┘     └────────┬───────────┘
+         │                         │
+         └───────────┬─────────────┘
+                     │ vendored at lockclaw-core/
+              ┌──────▼──────┐
+              │ lockclaw-core│
+              │  (policies,  │
+              │  audit, scan)│
+              └──────────────┘
+```
+
+## Success looks like
+
+- Every listening port appears in the allowlist — or the build fails.
+- SSH (when enabled) accepts only key-based auth with modern ciphers.
+- No runtime process runs as root.
+- Smoke tests exit 0 on a clean build with zero manual steps.
+- A newcomer can identify which repo to use in under 15 seconds.
+
 ## Who it's for
 
 Developers and homelabbers who want to run OpenClaw, Ollama, or other AI runtimes in containers with sane security defaults — without manual hardening.
