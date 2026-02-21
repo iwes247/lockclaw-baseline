@@ -1,11 +1,30 @@
+# Build artifacts
 *.stub
 .upstream/
+node_modules/
+__pycache__/
+dist/
+build/
+*.so
+
+# Credentials / keys — never commit
 .env
 .env.*
 *.pem
 *.key
 id_rsa*
 id_ed25519*
-__pycache__/
+
+# Docker volumes / local runtime data
+volumes/
+*.log
+/tmp/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
 .vscode/
 .idea/
