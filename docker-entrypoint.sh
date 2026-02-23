@@ -48,17 +48,11 @@ json_string() {
 
 prepare_data_dir() {
     mkdir -p "$LOCKCLAW_DATA_DIR"
-
-    if id lockclaw >/dev/null 2>&1; then
-        if ! su lockclaw -s /bin/sh -c "test -w '$LOCKCLAW_DATA_DIR'"; then
-            chmod 0777 "$LOCKCLAW_DATA_DIR" 2>/dev/null || true
-        fi
-
-        if ! su lockclaw -s /bin/sh -c "test -w '$LOCKCLAW_DATA_DIR'"; then
-            log "FATAL: $LOCKCLAW_DATA_DIR is not writable by lockclaw user"
-            log "FATAL: ensure volume permissions allow UID/GID write access"
-            exit 1
-        fi
+    chmod 0777 "$LOCKCLAW_DATA_DIR" 2>/dev/null || true
+    if ! test -w "$LOCKCLAW_DATA_DIR"; then
+        log "FATAL: $LOCKCLAW_DATA_DIR is not writable"
+        log "FATAL: ensure volume permissions allow writes for the container runtime"
+        exit 1
     fi
 }
 
@@ -67,7 +61,7 @@ start_openclaw() {
     if command -v openclaw >/dev/null 2>&1; then
         export HOME="$LOCKCLAW_DATA_DIR"
         mkdir -p "$LOCKCLAW_DATA_DIR/openclaw/workspace/skills"
-        su lockclaw -c 'openclaw gateway --port 18789 &' 2>/dev/null
+        openclaw gateway --port 18789 >/dev/null 2>&1 &
         sleep 2
         if command -v ss >/dev/null 2>&1 && ss -tlnH 2>/dev/null | grep -q ':18789'; then
             log "OpenClaw gateway started (ws://127.0.0.1:18789)"
@@ -83,9 +77,8 @@ start_ollama() {
         export OLLAMA_MODELS="${OLLAMA_MODELS:-${LOCKCLAW_DATA_DIR}/ollama/models}"
         mkdir -p "$OLLAMA_MODELS"
 
-        su lockclaw -c \
-            "OLLAMA_HOST=$OLLAMA_HOST OLLAMA_MODELS=$OLLAMA_MODELS ollama serve &" \
-            2>/dev/null
+        OLLAMA_HOST="$OLLAMA_HOST" OLLAMA_MODELS="$OLLAMA_MODELS" \
+            ollama serve >/dev/null 2>&1 &
         sleep 2
         if command -v ss >/dev/null 2>&1 && ss -tlnH 2>/dev/null | grep -q ':11434'; then
             log "Ollama started ($OLLAMA_HOST)"
