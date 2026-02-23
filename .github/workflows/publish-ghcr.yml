@@ -70,6 +70,18 @@ jobs:
             -v lockclaw-ghcr-data:/data \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.target }}
           sleep 5
+
+          RUNNING=$(docker inspect -f '{{.State.Running}}' lockclaw-ghcr 2>/dev/null || echo "false")
+          if [ "$RUNNING" != "true" ]; then
+            echo "FAIL: container exited before smoke test"
+            docker logs lockclaw-ghcr 2>&1 || true
+            exit 1
+          fi
+
           docker exec lockclaw-ghcr /opt/lockclaw/scripts/test-smoke.sh
-          docker rm -f lockclaw-ghcr
-          docker volume rm lockclaw-ghcr-data
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f lockclaw-ghcr 2>/dev/null || true
+          docker volume rm lockclaw-ghcr-data 2>/dev/null || true
