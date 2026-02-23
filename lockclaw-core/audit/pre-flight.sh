@@ -92,7 +92,12 @@ fi
 
 for path in "${WRITABLE_PATHS[@]}"; do
     [ -d "$path" ] || fail "required writable path missing: $path"
-    [ -w "$path" ] || fail "required writable path is not writable: $path"
+    if id lockclaw >/dev/null 2>&1; then
+        su lockclaw -s /bin/sh -c "test -w '$path'" \
+            || fail "required writable path is not writable by lockclaw user: $path"
+    else
+        [ -w "$path" ] || fail "required writable path is not writable: $path"
+    fi
 done
 
 is_policy_writable_path() {

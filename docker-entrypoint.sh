@@ -48,7 +48,6 @@ json_string() {
 
 prepare_data_dir() {
     mkdir -p "$LOCKCLAW_DATA_DIR"
-    chown -R lockclaw:lockclaw "$LOCKCLAW_DATA_DIR"
 }
 
 # ── Runtime startup ──────────────────────────────────────────
@@ -56,7 +55,6 @@ start_openclaw() {
     if command -v openclaw >/dev/null 2>&1; then
         export HOME="$LOCKCLAW_DATA_DIR"
         mkdir -p "$LOCKCLAW_DATA_DIR/openclaw/workspace/skills"
-        chown -R lockclaw:lockclaw "$LOCKCLAW_DATA_DIR/openclaw"
         su lockclaw -c 'openclaw gateway --port 18789 &' 2>/dev/null
         sleep 2
         if command -v ss >/dev/null 2>&1 && ss -tlnH 2>/dev/null | grep -q ':18789'; then
@@ -72,7 +70,6 @@ start_ollama() {
         export OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
         export OLLAMA_MODELS="${OLLAMA_MODELS:-${LOCKCLAW_DATA_DIR}/ollama/models}"
         mkdir -p "$OLLAMA_MODELS"
-        chown -R lockclaw:lockclaw "${LOCKCLAW_DATA_DIR}/ollama"
 
         su lockclaw -c \
             "OLLAMA_HOST=$OLLAMA_HOST OLLAMA_MODELS=$OLLAMA_MODELS ollama serve &" \
