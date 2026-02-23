@@ -116,7 +116,7 @@ while read -r _ mountpoint fstype options _; do
 
     if [ "$fstype" = "tmpfs" ]; then
         case "$mountpoint" in
-            /tmp|/run|/run/*|/var/tmp|/dev|/dev/shm)
+            /tmp|/run|/run/*|/var/tmp|/dev|/dev/shm|/proc/*)
                 continue
                 ;;
         esac
