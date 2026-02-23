@@ -25,7 +25,7 @@
 #     lockclaw:latest
 
 # ═════════════════════════════════════════════════════════════
-# PINNED VERSIONS — Update these deliberately, never use @latest.
+# PINNED VERSIONS — Update these deliberately, never use floating tags.
 #
 #   To upgrade:  1. Change the ARG default below.
 #                2. Run CI (build-and-smoke).
@@ -34,7 +34,7 @@
 #   To override at build time:
 #     docker build --build-arg OPENCLAW_VERSION=2026.2.21 ...
 #
-# The CI lint step will hard-fail if @latest appears anywhere
+# The CI lint step will hard-fail if floating npm tags appear anywhere
 # in this file.  See .github/workflows/build-and-smoke.yml.
 # ═════════════════════════════════════════════════════════════
 

@@ -114,11 +114,17 @@ while read -r _ mountpoint fstype options _; do
 
     if [ "$fstype" = "tmpfs" ]; then
         case "$mountpoint" in
-            /tmp|/run|/var/tmp|/dev/shm)
+            /tmp|/run|/run/*|/var/tmp|/dev|/dev/shm)
                 continue
                 ;;
         esac
     fi
+
+    case "$mountpoint" in
+        /etc/hosts|/etc/hostname|/etc/resolv.conf)
+            continue
+            ;;
+    esac
 
     case "$fstype" in
         proc|sysfs|cgroup|cgroup2|devpts|mqueue)
