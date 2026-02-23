@@ -1,0 +1,8 @@
+{
+  "mode": "builder",
+  "allowed_ports": [22, 18789, 11434],
+  "writable_paths": ["/data"],
+  "egress_policy": "allow",
+  "egress_logging": "banner_only",
+  "notes": "Builder mode keeps the same safety checks but uses a clearer outbound posture banner."
+}

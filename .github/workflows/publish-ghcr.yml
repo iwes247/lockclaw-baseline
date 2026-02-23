@@ -58,8 +58,18 @@ jobs:
 
       - name: Smoke test published image
         run: |
+          docker volume create lockclaw-ghcr-data
           docker run -d --name lockclaw-ghcr \
+            --read-only \
+            --tmpfs /tmp \
+            --tmpfs /run \
+            --tmpfs /var/tmp \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            -e LOCKCLAW_MODE=hobby \
+            -v lockclaw-ghcr-data:/data \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.target }}
           sleep 5
           docker exec lockclaw-ghcr /opt/lockclaw/scripts/test-smoke.sh
           docker rm -f lockclaw-ghcr
+          docker volume rm lockclaw-ghcr-data

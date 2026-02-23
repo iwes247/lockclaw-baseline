@@ -1,6 +1,6 @@
 {
   "profile": "container",
-  "description": "Default container profile — no published ports. All services loopback-only.",
-  "allowed_ports": [],
-  "notes": "In the default container profile, NO ports should be listening on non-loopback addresses. AI runtimes bind to 127.0.0.1 only. SSH is optional and must be explicitly enabled."
+  "description": "Baseline v1 container profile. No published ports by default; runtime ports are loopback-only.",
+  "allowed_ports": [22, 18789, 11434],
+  "notes": "Used by pre-flight posture checks in hobby/builder modes. SSH remains opt-in."
 }

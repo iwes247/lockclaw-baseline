@@ -6,15 +6,22 @@
 # Build from source instead:
 #   docker compose up -d --build openclaw
 #
-# With SSH access:
-#   LOCKCLAW_ENABLE_SSH=1 SSH_PUBLIC_KEY="$(cat ~/.ssh/id_ed25519.pub)" \
-#     docker compose --profile ssh up -d openclaw
+# Default locked-down mode:
+#   docker compose up -d openclaw
 
 x-common: &common
   restart: unless-stopped
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp
+    - /run
+    - /var/tmp
   environment:
-    - LOCKCLAW_ENABLE_SSH=${LOCKCLAW_ENABLE_SSH:-0}
-    - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-}
+    - LOCKCLAW_MODE=${LOCKCLAW_MODE:-hobby}
 
 services:
   # ── OpenClaw gateway + claude-mem ──────────────────────────
@@ -26,12 +33,12 @@ services:
       target: openclaw
     container_name: lockclaw-openclaw
     environment:
-      - LOCKCLAW_ENABLE_SSH=${LOCKCLAW_ENABLE_SSH:-0}
-      - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-}
+      - LOCKCLAW_MODE=${LOCKCLAW_MODE:-hobby}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOCKCLAW_DATA_DIR=/data
     volumes:
-      - openclaw-data:/home/lockclaw/.openclaw
+      - openclaw-data:/data
     # OpenClaw gateway is loopback-only inside the container.
     # Access via SSH tunnel:
     #   ssh -p 2222 -L 18789:127.0.0.1:18789 lockclaw@localhost
@@ -45,12 +52,12 @@ services:
       target: ollama
     container_name: lockclaw-ollama
     environment:
-      - LOCKCLAW_ENABLE_SSH=${LOCKCLAW_ENABLE_SSH:-0}
-      - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-}
+      - LOCKCLAW_MODE=${LOCKCLAW_MODE:-hobby}
+      - LOCKCLAW_DATA_DIR=/data
       - OLLAMA_HOST=127.0.0.1:11434
-      - OLLAMA_MODELS=/home/lockclaw/.ollama/models
+      - OLLAMA_MODELS=/data/ollama/models
     volumes:
-      - ollama-models:/home/lockclaw/.ollama
+      - ollama-models:/data
     # Ollama API is loopback-only inside the container.
     # Access via SSH tunnel:
     #   ssh -p 2223 -L 11434:127.0.0.1:11434 lockclaw@localhost
@@ -62,45 +69,6 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
-
-  # ── SSH sidecar (opt-in via --profile ssh) ─────────────────
-  # Activated only when you explicitly request the ssh profile.
-  # This avoids mapping ports by default.
-  openclaw-ssh:
-    <<: *common
-    image: ghcr.io/iwes247/lockclaw-baseline:openclaw
-    build:
-      context: .
-      target: openclaw
-    container_name: lockclaw-openclaw-ssh
-    profiles: ["ssh"]
-    environment:
-      - LOCKCLAW_ENABLE_SSH=1
-      - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    volumes:
-      - openclaw-data:/home/lockclaw/.openclaw
-    ports:
-      - "${LOCKCLAW_SSH_PORT:-2222}:22"
-
-  ollama-ssh:
-    <<: *common
-    image: ghcr.io/iwes247/lockclaw-baseline:ollama
-    build:
-      context: .
-      target: ollama
-    container_name: lockclaw-ollama-ssh
-    profiles: ["ssh"]
-    environment:
-      - LOCKCLAW_ENABLE_SSH=1
-      - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-}
-      - OLLAMA_HOST=127.0.0.1:11434
-      - OLLAMA_MODELS=/home/lockclaw/.ollama/models
-    volumes:
-      - ollama-models:/home/lockclaw/.ollama
-    ports:
-      - "${LOCKCLAW_SSH_PORT_OLLAMA:-2223}:22"
 
 volumes:
   openclaw-data:

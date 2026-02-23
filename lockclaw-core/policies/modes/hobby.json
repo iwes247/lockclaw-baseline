@@ -1,0 +1,8 @@
+{
+  "mode": "hobby",
+  "allowed_ports": [22, 18789, 11434],
+  "writable_paths": ["/data"],
+  "egress_policy": "allow",
+  "egress_logging": "none",
+  "notes": "Default mode for day-to-day local usage with strict runtime posture checks."
+}

@@ -15,11 +15,14 @@
 # Run (default — no NET_ADMIN required):
 #   docker run -d --name lockclaw lockclaw:latest
 #
-# Run (with SSH access):
+# Run (default locked-down posture):
 #   docker run -d --name lockclaw \
-#     -e SSH_PUBLIC_KEY="$(cat ~/.ssh/id_ed25519.pub)" \
-#     -e LOCKCLAW_ENABLE_SSH=1 \
-#     -p 2222:22 lockclaw:latest
+#     --read-only \
+#     --tmpfs /tmp --tmpfs /run --tmpfs /var/tmp \
+#     --security-opt no-new-privileges:true \
+#     --cap-drop ALL \
+#     -v lockclaw-data:/data \
+#     lockclaw:latest
 
 # ═════════════════════════════════════════════════════════════
 # PINNED VERSIONS — Update these deliberately, never use @latest.
@@ -48,6 +51,7 @@ LABEL org.opencontainers.image.source="https://github.com/iwes247/lockclaw-basel
 # ── Environment ──────────────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LOCKCLAW_HOME=/opt/lockclaw
+ENV LOCKCLAW_DATA_DIR=/data
 
 # ── Install minimal packages ────────────────────────────────
 # Only what's needed for a functional container + diagnostics.
@@ -63,30 +67,8 @@ RUN apt-get update && \
 RUN useradd -m -s /bin/bash lockclaw && \
     passwd -l lockclaw
 
-# ── Install SSH (optional — activated via LOCKCLAW_ENABLE_SSH) ──
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends openssh-server && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /run/sshd && \
-    # Harden SSH config even if not enabled by default
-    mkdir -p /etc/ssh/sshd_config.d && \
-    printf '%s\n' \
-      'PermitRootLogin no' \
-      'PasswordAuthentication no' \
-      'PubkeyAuthentication yes' \
-      'MaxAuthTries 3' \
-      'X11Forwarding no' \
-      'PermitEmptyPasswords no' \
-      'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com' \
-      'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org' \
-      'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com' \
-      > /etc/ssh/sshd_config.d/10-lockclaw.conf && \
-    chmod 0600 /etc/ssh/sshd_config.d/10-lockclaw.conf && \
-    ssh-keygen -A && \
-    mkdir -p /home/lockclaw/.ssh && \
-    chmod 700 /home/lockclaw/.ssh && \
-    chown -R lockclaw:lockclaw /home/lockclaw/.ssh
+RUN mkdir -p ${LOCKCLAW_DATA_DIR} && \
+  chown -R lockclaw:lockclaw ${LOCKCLAW_DATA_DIR}
 
 # ── Copy LockClaw tooling ───────────────────────────────────
 COPY scripts/          ${LOCKCLAW_HOME}/scripts/
@@ -99,7 +81,6 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # No EXPOSE by default — services bind loopback only.
-# Expose SSH only if LOCKCLAW_ENABLE_SSH=1 at runtime.
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["start"]
@@ -135,7 +116,7 @@ RUN npm install -g openclaw@${OPENCLAW_VERSION} && \
     npm cache clean --force
 
 # ── Configure OpenClaw workspace ─────────────────────────────
-RUN mkdir -p /home/lockclaw/.openclaw/workspace/skills && \
+RUN mkdir -p /data/openclaw/workspace/skills && \
     printf '%s\n' \
       '{' \
       '  "gateway": {' \
@@ -146,8 +127,8 @@ RUN mkdir -p /home/lockclaw/.openclaw/workspace/skills && \
       '    "model": "anthropic/claude-opus-4-6"' \
       '  }' \
       '}' \
-      > /home/lockclaw/.openclaw/openclaw.json && \
-    chown -R lockclaw:lockclaw /home/lockclaw/.openclaw
+      > /data/openclaw/openclaw.json && \
+    chown -R lockclaw:lockclaw /data/openclaw
 
 # ── Pre-install claude-mem plugin ────────────────────────────
 RUN npm install -g claude-mem@${CLAUDE_MEM_VERSION} && \
@@ -185,11 +166,11 @@ RUN apt-get update && \
 
 # ── Configure Ollama for loopback-only ───────────────────────
 ENV OLLAMA_HOST=127.0.0.1:11434
-ENV OLLAMA_MODELS=/home/lockclaw/.ollama/models
+ENV OLLAMA_MODELS=/data/ollama/models
 
 # ── Create Ollama dirs with correct ownership ────────────────
-RUN mkdir -p /home/lockclaw/.ollama/models && \
-    chown -R lockclaw:lockclaw /home/lockclaw/.ollama
+RUN mkdir -p /data/ollama/models && \
+  chown -R lockclaw:lockclaw /data/ollama
 
 # Ollama listens on 127.0.0.1:11434 (loopback only).
 # Access via SSH tunnel: ssh -L 11434:127.0.0.1:11434 ...

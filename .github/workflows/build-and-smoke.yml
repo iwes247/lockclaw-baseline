@@ -70,8 +70,17 @@ jobs:
 
       - name: Start container (no elevated capabilities)
         run: |
+          docker volume create lockclaw-data-${{ matrix.target }}
           docker run -d \
             --name lockclaw-${{ matrix.target }} \
+            --read-only \
+            --tmpfs /tmp \
+            --tmpfs /run \
+            --tmpfs /var/tmp \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            -e LOCKCLAW_MODE=hobby \
+            -v lockclaw-data-${{ matrix.target }}:/data \
             lockclaw:${{ matrix.target }}
 
       - name: Wait for services
@@ -82,6 +91,12 @@ jobs:
           docker exec lockclaw-${{ matrix.target }} \
             /opt/lockclaw/scripts/test-smoke.sh
 
+      - name: Verify preflight passed
+        run: |
+          docker logs lockclaw-${{ matrix.target }} 2>&1 | grep -q 'Pre-flight PASSED' \
+            || { echo "FAIL: pre-flight did not pass"; exit 1; }
+          echo "PASS: pre-flight passed"
+
       - name: HARD FAIL — no unexpected published ports
         run: |
           echo "=== Port Exposure Check (${{ matrix.target }}) ==="
@@ -89,8 +104,7 @@ jobs:
             ss -tlnH 2>/dev/null | awk '{print $4}' || true)
           echo "All listeners: $LISTENERS"
 
-          # Nothing should be on non-loopback by default
-          # (SSH is opt-in via LOCKCLAW_ENABLE_SSH=1)
+          # Nothing should be on non-loopback by default.
           NON_LOOPBACK=$(echo "$LISTENERS" \
             | grep -v '127\.0\.0\.1' \
             | grep -v '\[::1\]' \
@@ -104,74 +118,80 @@ jobs:
           fi
           echo "PASS: All services are loopback-only (no published ports)"
 
-      - name: Verify SSH is NOT running by default
-        run: |
-          if docker exec lockclaw-${{ matrix.target }} \
-            ss -tlnH 2>/dev/null | grep -q ':22'; then
-            echo "FAIL: SSH is listening but LOCKCLAW_ENABLE_SSH was not set"
-            exit 1
-          fi
-          echo "PASS: SSH is not running by default"
-
       - name: Cleanup
         if: always()
-        run: docker rm -f lockclaw-${{ matrix.target }} 2>/dev/null || true
+        run: |
+          docker rm -f lockclaw-${{ matrix.target }} 2>/dev/null || true
+          docker volume rm lockclaw-data-${{ matrix.target }} 2>/dev/null || true
 
-  build-with-ssh:
-    needs: lint
+  fail-fast:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build openclaw image
-        run: docker build --target openclaw -t lockclaw:openclaw-ssh .
+        run: docker build --target openclaw -t lockclaw:openclaw .
 
-      - name: Generate test SSH key
-        run: ssh-keygen -t ed25519 -f /tmp/test_key -N "" -q
-
-      - name: Start container with SSH enabled
+      - name: Fail on missing read-only root
         run: |
-          docker run -d \
-            --name lockclaw-ssh \
-            -e LOCKCLAW_ENABLE_SSH=1 \
-            -e SSH_PUBLIC_KEY="$(cat /tmp/test_key.pub)" \
-            lockclaw:openclaw-ssh
+          docker run --name ff-no-ro \
+            --tmpfs /tmp --tmpfs /run --tmpfs /var/tmp \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            -v ff-no-ro-data:/data \
+            lockclaw:openclaw || true
+          docker logs ff-no-ro 2>&1 | grep -q 'root filesystem is not read-only' \
+            || { echo "FAIL: missing read-only root did not fail preflight"; exit 1; }
 
-      - name: Wait for services
-        run: sleep 5
-
-      - name: Verify SSH is running and hardened
+      - name: Fail on RW mount outside /data
         run: |
-          docker exec lockclaw-ssh ss -tlnH | grep ':22' \
-            || { echo "FAIL: SSH not listening"; exit 1; }
-          echo "PASS: SSH is listening"
+          mkdir -p /tmp/lockclaw-rw
+          docker run --name ff-rw-mount \
+            --read-only \
+            --tmpfs /tmp --tmpfs /run --tmpfs /var/tmp \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            -v ff-rw-mount-data:/data \
+            -v /tmp/lockclaw-rw:/workspace \
+            lockclaw:openclaw || true
+          docker logs ff-rw-mount 2>&1 | grep -q 'RW mount outside allowed writable paths' \
+            || { echo "FAIL: RW mount outside /data did not fail preflight"; exit 1; }
 
-          docker exec lockclaw-ssh \
-            cat /etc/ssh/sshd_config.d/10-lockclaw.conf \
-            | grep -qi 'PermitRootLogin no' \
-            || { echo "FAIL: PermitRootLogin not no"; exit 1; }
-          echo "PASS: SSH hardened"
-
-      - name: Port check — only SSH on non-loopback
+      - name: Fail on dangerous capability
         run: |
-          NON_LOOPBACK=$(docker exec lockclaw-ssh \
-            ss -tlnH 2>/dev/null | awk '{print $4}' \
-            | grep -v '127\.0\.0\.1' \
-            | grep -v '\[::1\]' \
-            | grep -v '^\*:' \
-            || true)
+          docker run --name ff-cap \
+            --read-only \
+            --tmpfs /tmp --tmpfs /run --tmpfs /var/tmp \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            --cap-add SYS_ADMIN \
+            -v ff-cap-data:/data \
+            lockclaw:openclaw || true
+          docker logs ff-cap 2>&1 | grep -q 'dangerous capability present' \
+            || { echo "FAIL: dangerous capability did not fail preflight"; exit 1; }
 
-          UNEXPECTED=$(echo "$NON_LOOPBACK" \
-            | grep -Ev ':22$' \
-            || true)
+      - name: Fail on unexpected listener
+        run: |
+          docker run --name ff-listener \
+            --read-only \
+            --tmpfs /tmp --tmpfs /run --tmpfs /var/tmp \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            -v ff-listener-data:/data \
+            --entrypoint /bin/bash \
+            lockclaw:openclaw \
+            -lc "node -e \"require('net').createServer(()=>{}).listen(9999, '0.0.0.0'); setInterval(()=>{}, 1<<30)\" >/dev/null 2>&1 & exec docker-entrypoint.sh start" || true
+          docker logs ff-listener 2>&1 | grep -q 'listening port :9999 is not allowlisted' \
+            || { echo "FAIL: unexpected listener did not fail preflight"; exit 1; }
 
-          if [ -n "$UNEXPECTED" ]; then
-            echo "FAIL: Unexpected non-loopback listeners: $UNEXPECTED"
-            exit 1
-          fi
-          echo "PASS: Only SSH on non-loopback"
-
-      - name: Cleanup
+      - name: Cleanup fail-fast containers
         if: always()
-        run: docker rm -f lockclaw-ssh 2>/dev/null || true
+        run: |
+          for c in ff-no-ro ff-rw-mount ff-cap ff-listener; do
+            docker rm -f "$c" 2>/dev/null || true
+          done
+          for v in ff-no-ro-data ff-rw-mount-data ff-cap-data ff-listener-data; do
+            docker volume rm "$v" 2>/dev/null || true
+          done

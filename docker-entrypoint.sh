@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# LockClaw Baseline — container entrypoint
-# Detects which AI runtime is installed and starts it.
-# Does NOT start OS-level services (nftables, auditd, fail2ban).
-# Those belong in lockclaw-appliance.
+# LockClaw Baseline — v1 container entrypoint
+# Enforces locked-down defaults for containerized AI runtimes.
 
 log() { echo "[lockclaw] $*"; }
 
-# ── Detect installed runtime ────────────────────────────────
+LOCKCLAW_HOME="${LOCKCLAW_HOME:-/opt/lockclaw}"
+LOCKCLAW_MODE="${LOCKCLAW_MODE:-hobby}"
+CORE_DIR="${LOCKCLAW_HOME}/lockclaw-core"
+MODE_POLICY_FILE="${CORE_DIR}/policies/modes/${LOCKCLAW_MODE}.json"
+LOCKCLAW_DATA_DIR="${LOCKCLAW_DATA_DIR:-/data}"
+
 detect_runtime() {
     if command -v openclaw >/dev/null 2>&1; then
         echo "openclaw"
@@ -21,45 +24,39 @@ detect_runtime() {
 
 RUNTIME="$(detect_runtime)"
 
-# ── SSH key injection ────────────────────────────────────────
-inject_ssh_key() {
-    if [ -n "${SSH_PUBLIC_KEY:-}" ]; then
-        mkdir -p /home/lockclaw/.ssh
-        echo "$SSH_PUBLIC_KEY" > /home/lockclaw/.ssh/authorized_keys
-        chmod 600 /home/lockclaw/.ssh/authorized_keys
-        chown -R lockclaw:lockclaw /home/lockclaw/.ssh
-        log "SSH public key injected for user 'lockclaw'"
-    elif [ -f /home/lockclaw/.ssh/authorized_keys ]; then
-        log "SSH authorized_keys found (mounted or pre-existing)"
+require_mode_policy() {
+    if [ ! -f "$MODE_POLICY_FILE" ]; then
+        log "FATAL: mode policy not found: $MODE_POLICY_FILE"
+        exit 1
     fi
 }
 
-# ── Optional SSH ─────────────────────────────────────────────
-start_ssh() {
-    if [ "${LOCKCLAW_ENABLE_SSH:-0}" = "1" ]; then
-        inject_ssh_key
+json_array_numbers() {
+    local key="$1"
+    grep -oP '"'"$key"'"\s*:\s*\[\K[^\]]*' "$MODE_POLICY_FILE" | tr ',' '\n' | tr -d ' ' | sed '/^$/d'
+}
 
-        if [ ! -f /home/lockclaw/.ssh/authorized_keys ]; then
-            log "WARN: SSH enabled but no key configured."
-            log "  Set SSH_PUBLIC_KEY env var or mount authorized_keys."
-            log "  Example: docker run -e SSH_PUBLIC_KEY=\"\$(cat ~/.ssh/id_ed25519.pub)\" ..."
-            return
-        fi
+json_array_strings() {
+    local key="$1"
+    grep -oP '"'"$key"'"\s*:\s*\[\K[^\]]*' "$MODE_POLICY_FILE" | tr ',' '\n' | sed -E 's/^\s*"(.*)"\s*$/\1/' | sed '/^$/d'
+}
 
-        if command -v sshd >/dev/null 2>&1; then
-            if /usr/sbin/sshd 2>/dev/null; then
-                log "sshd started (key-auth only, modern ciphers)"
-            else
-                log "WARN: sshd start failed"
-            fi
-        fi
-    fi
+json_string() {
+    local key="$1"
+    grep -oP '"'"$key"'"\s*:\s*"\K[^"]*' "$MODE_POLICY_FILE" | head -1
+}
+
+prepare_data_dir() {
+    mkdir -p "$LOCKCLAW_DATA_DIR"
+    chown -R lockclaw:lockclaw "$LOCKCLAW_DATA_DIR"
 }
 
 # ── Runtime startup ──────────────────────────────────────────
 start_openclaw() {
     if command -v openclaw >/dev/null 2>&1; then
-        export HOME=/home/lockclaw
+        export HOME="$LOCKCLAW_DATA_DIR"
+        mkdir -p "$LOCKCLAW_DATA_DIR/openclaw/workspace/skills"
+        chown -R lockclaw:lockclaw "$LOCKCLAW_DATA_DIR/openclaw"
         su lockclaw -c 'openclaw gateway --port 18789 &' 2>/dev/null
         sleep 2
         if command -v ss >/dev/null 2>&1 && ss -tlnH 2>/dev/null | grep -q ':18789'; then
@@ -73,7 +70,9 @@ start_openclaw() {
 start_ollama() {
     if command -v ollama >/dev/null 2>&1; then
         export OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
-        export OLLAMA_MODELS="${OLLAMA_MODELS:-/home/lockclaw/.ollama/models}"
+        export OLLAMA_MODELS="${OLLAMA_MODELS:-${LOCKCLAW_DATA_DIR}/ollama/models}"
+        mkdir -p "$OLLAMA_MODELS"
+        chown -R lockclaw:lockclaw "${LOCKCLAW_DATA_DIR}/ollama"
 
         su lockclaw -c \
             "OLLAMA_HOST=$OLLAMA_HOST OLLAMA_MODELS=$OLLAMA_MODELS ollama serve &" \
@@ -89,59 +88,48 @@ start_ollama() {
     fi
 }
 
-# ── Banner ───────────────────────────────────────────────────
-show_banner() {
+show_startup_banner() {
+    mapfile -t allowed_ports < <(json_array_numbers "allowed_ports")
+    mapfile -t writable_paths < <(json_array_strings "writable_paths")
+    local egress_policy
+    egress_policy="$(json_string "egress_policy")"
+
     log ""
     log "╔══════════════════════════════════════════════════════════╗"
-    log "║  LockClaw Baseline ready                                ║"
+    log "║  LockClaw Baseline v1 posture                           ║"
     log "║                                                         ║"
-    log "║  User:      lockclaw                                    ║"
-
-    if [ "${LOCKCLAW_ENABLE_SSH:-0}" = "1" ]; then
-        log "║  SSH:       enabled (port 22, key-auth only)            ║"
-    else
-        log "║  SSH:       disabled (set LOCKCLAW_ENABLE_SSH=1)        ║"
-    fi
-
-    case "$RUNTIME" in
-        openclaw)
-            log "║  Runtime:   OpenClaw (ws://127.0.0.1:18789)             ║"
-            log "║  Memory:    claude-mem (persistent across sessions)      ║"
-            ;;
-        ollama)
-            log "║  Runtime:   Ollama (http://127.0.0.1:11434)             ║"
-            log "║  Models:    /home/lockclaw/.ollama/models                ║"
-            ;;
-        base)
-            log "║  Runtime:   none (bring your own)                       ║"
-            ;;
-    esac
-
+    log "║  Mode:      ${LOCKCLAW_MODE}                                         ║"
+    log "║  Root FS:   read-only                                     ║"
+    log "║  Caps:      dropped + no-new-privileges                   ║"
     log "║                                                         ║"
+    log "║  Outbound:  ${egress_policy} (not enforced in baseline v1)       ║"
+    log "║                                                         ║"
+    log "║  Allowed Ports: ${allowed_ports[*]:-none}                           ║"
+    log "║  Writable Paths: ${writable_paths[*]}                           ║"
     log "║  Validate:  /opt/lockclaw/scripts/test-smoke.sh         ║"
     log "╚══════════════════════════════════════════════════════════╝"
     log ""
 }
 
-# ── Pre-flight security gate ─────────────────────────────────
-# ⚠ SECURITY: Fail-closed. If pre-flight detects unauthorized ports,
-# the container MUST NOT start any application processes.
 run_preflight() {
-    local preflight="${LOCKCLAW_HOME}/scripts/pre-flight.sh"
+    local preflight="${CORE_DIR}/audit/pre-flight.sh"
     if [ -x "$preflight" ]; then
-        if ! "$preflight"; then
+        if ! "$preflight" --mode "$LOCKCLAW_MODE"; then
             log "FATAL: pre-flight security check failed. Aborting."
             exit 1
         fi
     else
-        log "WARN: pre-flight.sh not found or not executable at $preflight"
+        log "FATAL: core pre-flight not found or not executable at $preflight"
+        exit 1
     fi
 }
 
-# ── Main ─────────────────────────────────────────────────────
 start_services() {
+    require_mode_policy
+    prepare_data_dir
     run_preflight
-    start_ssh
+    show_startup_banner
+    log "Outbound network is allowed; baseline v1 does not enforce egress restrictions."
 
     case "$RUNTIME" in
         openclaw) start_openclaw ;;
@@ -149,7 +137,6 @@ start_services() {
         base)     log "No AI runtime detected — base image" ;;
     esac
 
-    show_banner
 }
 
 case "${1:-start}" in
