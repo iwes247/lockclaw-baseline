@@ -68,7 +68,7 @@ RUN useradd -m -s /bin/bash lockclaw && \
     passwd -l lockclaw
 
 RUN mkdir -p ${LOCKCLAW_DATA_DIR} && \
-  chown -R lockclaw:lockclaw ${LOCKCLAW_DATA_DIR}
+  chmod 0777 ${LOCKCLAW_DATA_DIR}
 
 # ── Copy LockClaw tooling ───────────────────────────────────
 COPY scripts/          ${LOCKCLAW_HOME}/scripts/

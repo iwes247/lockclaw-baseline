@@ -48,12 +48,6 @@ json_string() {
 
 prepare_data_dir() {
     mkdir -p "$LOCKCLAW_DATA_DIR"
-    chmod 0777 "$LOCKCLAW_DATA_DIR" 2>/dev/null || true
-    if ! test -w "$LOCKCLAW_DATA_DIR"; then
-        log "FATAL: $LOCKCLAW_DATA_DIR is not writable"
-        log "FATAL: ensure volume permissions allow writes for the container runtime"
-        exit 1
-    fi
 }
 
 # ── Runtime startup ──────────────────────────────────────────

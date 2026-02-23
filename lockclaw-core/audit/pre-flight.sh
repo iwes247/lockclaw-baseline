@@ -92,7 +92,9 @@ fi
 
 for path in "${WRITABLE_PATHS[@]}"; do
     [ -d "$path" ] || fail "required writable path missing: $path"
-    [ -w "$path" ] || fail "required writable path is not writable: $path"
+    mount_opts="$(awk -v target="$path" '$2==target{print $4; exit}' /proc/mounts)"
+    [ -n "$mount_opts" ] || fail "required writable path is not mounted: $path"
+    [[ ",$mount_opts," == *,rw,* ]] || fail "required writable path is not mounted rw: $path"
 done
 
 is_policy_writable_path() {
