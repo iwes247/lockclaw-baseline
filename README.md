@@ -77,6 +77,11 @@ docker exec lockclaw-openclaw /opt/lockclaw/scripts/test-smoke.sh
 - [lockclaw-core](https://github.com/iwes247/lockclaw-core) — policy + preflight single source of truth
 - [lockclaw-appliance](https://github.com/iwes247/lockclaw-appliance) — host-level hardening and optional hard network controls
 
+## Contributing
+
+Contributing workflow: see [lockclaw-core/CONTRIBUTING.md](https://github.com/iwes247/lockclaw-core/blob/main/CONTRIBUTING.md).
+Changes must be reproducible and must not weaken fail-closed defaults.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
